@@ -170,10 +170,10 @@ Position Game::Astart(Position p1, Position p2)
                 }
             }
         }
-        if (open.empty())
-            return p1;
         if (judge)
             break;
+        if (open.empty())
+            return p1;
     }
     Position t = p2;
     while (p2 != p1)
@@ -234,19 +234,31 @@ void Game::loadGameConfig()
 }
 Choose Game::decideNextMove()
 {
+    printMap();
     Choose bestDirection = LEFT;
     Position goal = objects[0].pos;
+    for (int i = 0; i < 4; i++)
+    {
+        int x = me.head.x + DIRECTIONS[i].x, y = me.head.y + DIRECTIONS[i].y;
+        if (map[x][y] == HEDA && me.shieldTime)
+            return static_cast<Choose>(i);
+    }
     Position pos = Astart(me.head, goal) - me.head;
     if (pos.x == 0 && pos.y == 0)
     {
+        int body = -1;
         for (int i = 0; i < 4; i++)
         {
             int x = me.head.x + DIRECTIONS[i].x, y = me.head.y + DIRECTIONS[i].y;
-            if (map[x][y] == WALL || map[x][y] == HEDA || map[x][y] == BODY)
+            if (map[x][y] == BODY)
+                body = i;
+            if (map[x][y] == WALL || map[x][y] == HEDA || map[x][y] == BODY || i == (me.direction + 2) % 4)
                 continue;
             return static_cast<Choose>(i);
         }
-        if (me.shieldCooldown == 0)
+        if (body >= 0 && me.shieldTime)
+            return static_cast<Choose>(body);
+        if (me.shieldCooldown == 0 && me.score >= 20)
             return SHIELD;
     }
     for (int i = 0; i < 4; i++)

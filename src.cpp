@@ -110,6 +110,7 @@ private:
     void loadGameConfig();
     Choose decideNextMove();
     Position Astart(Position p1, Position p2);
+    bool checkDanger(Position, Position);
 
 public:
     Game() : me{}, remainingTime(0), numObjects(0), numPlayers(0) {}
@@ -133,9 +134,6 @@ int Manhattan(int x, int y, int x1, int y1)
 }
 Position Game::Astart(Position p1, Position p2)
 {
-    // std::fstream in("C:\\Cpp\\in.txt");
-    // in << "Goal: " << p2.x << " " << p2.y << std::endl;
-    // std::cout << "Goal: " << p2.x << " " << p2.y << std::endl;
     bool judge = false;
     for (int i = 0; i < MAXN; i++)
         for (int j = 0; j < MAXM; j++)
@@ -148,30 +146,19 @@ Position Game::Astart(Position p1, Position p2)
     open.push(start);
     while (!open.empty())
     {
-        // in << "-------------------" << std::endl;
         Node cur = open.top();
         open.pop();
-        // in << "CurrentPos: " << "[" << cur.pos.x << "," << cur.pos.y << "] " << " F:" << cur.f << std::endl;
         close[cur.pos.x][cur.pos.y] = true;
         for (int i = 0; i < 4; i++)
         {
             int x = cur.pos.x + DIRECTIONS[i].x, y = cur.pos.y + DIRECTIONS[i].y;
-            // in << "to: " << "[" << x << " " << y << "]" << std::endl;
-            if (!isValidMove(x, y, cur.direction, i) || close[x][y])
-            {
-                // if (!isValidMove(x, y, cur.direction, i))
-                // in << "NotValid: " << cur.direction << " " << i << std::endl;
-                // in << "[" << x << " " << y << "]" << "is not ok" << std::endl;
-                // std::cout << "[" << x << " " << y << "]" << "is not ok" << std::endl;
+            if (!isValidMove(x, y, cur.direction, i) || close[x][y] || checkDanger({x, y}, cur.pos))
                 continue;
-            }
             int g = cur.g + 10;
             int h = Manhattan(x, y, p2.x, p2.y);
             int f = g + h;
-            // in << "Compare: " << valueF[x][y] << " " << f << std::endl;
             if (valueF[x][y] > f)
             {
-                // in << "[" << x << " " << y << "]" << "is ok" << std::endl;
                 valueF[x][y] = f;
                 pre[x][y][0] = cur.pos.x;
                 pre[x][y][1] = cur.pos.y;
@@ -179,17 +166,12 @@ Position Game::Astart(Position p1, Position p2)
                 if (x == p2.x && y == p2.y)
                 {
                     judge = true;
-                    // in << "Find" << std::endl;
                     break;
                 }
             }
         }
         if (open.empty())
-        {
-            // in << "Empty" << std::endl;
-            // std::cout << "Empty" << std::endl;
             return p1;
-        }
         if (judge)
             break;
     }
@@ -197,28 +179,17 @@ Position Game::Astart(Position p1, Position p2)
     while (p2 != p1)
     {
         t = p2;
-        // in << "-------------------" << std::endl;
-        // in << "CurrentPos: " << "[" << p2.x << "," << p2.y << "] " << std::endl;
         p2 = {pre[p2.x][p2.y][0], pre[p2.x][p2.y][1]};
     }
-    // in << "-------------------" << std::endl;
-    // in << "CurrentPos: " << "[" << p2.x << "," << p2.y << "] " << std::endl;
-    // in << "Choose: " << t.x << " " << t.y << std::endl;
     return t;
 }
 bool Game::isValidMove(int x, int y, int now_direction, int cur_direction) const
 {
-    if (x < 0 || x >= MAXN || y < 0 || y >= MAXM || map[x][y] == WALL || map[x][y] == HEDA || map[x][y] == BODY) //???
-    {
-        // std::cout << "Out" << std::endl;
+    if (x < 0 || x >= MAXN || y < 0 || y >= MAXM || map[x][y] == WALL || map[x][y] == HEDA || map[x][y] == BODY || map[x][y] == TRAP)
         return false;
-    }
     // Prevents moving in the opposite direction
     if (cur_direction == (now_direction + 2) % 4)
-    {
-        // std::cout << "Opposite" << cur_direction << " " << now_direction << std::endl;
         return false;
-    }
     return true;
 }
 void Game::loadPlayer(Player &player)
@@ -226,7 +197,8 @@ void Game::loadPlayer(Player &player)
     std::cin >> player.head.x >> player.head.y;
     player.body.clear();
     player.body.push_back(player.head);
-    map[player.head.x][player.head.y] = HEDA;
+    if (player.id != ID)
+        map[player.head.x][player.head.y] = HEDA;
     for (int j = 1; j < player.length; ++j)
     {
         Position segment;
@@ -244,8 +216,6 @@ void Game::loadGameConfig()
     {
         std::cin >> obj.pos.x >> obj.pos.y >> obj.value;
         map[obj.pos.x][obj.pos.y] = obj.value; // Reflect game objects on the map
-        // printMap();
-        // std::cout << "-------------------" << std::endl;
     }
     std::cin >> numPlayers;
     players.resize(numPlayers);
@@ -264,15 +234,21 @@ void Game::loadGameConfig()
 }
 Choose Game::decideNextMove()
 {
-    // printMap();
-    // std::cout << "-------------------" << std::endl;
     Choose bestDirection = LEFT;
-    if (me.shieldCooldown == 0)
-        bestDirection = SHIELD;
     Position goal = objects[0].pos;
     Position pos = Astart(me.head, goal) - me.head;
-    if (pos.x == 0 && pos.y == 0 && me.shieldCooldown == 0)
-        return SHIELD;
+    if (pos.x == 0 && pos.y == 0)
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            int x = me.head.x + DIRECTIONS[i].x, y = me.head.y + DIRECTIONS[i].y;
+            if (map[x][y] == WALL || map[x][y] == HEDA || map[x][y] == BODY)
+                continue;
+            return static_cast<Choose>(i);
+        }
+        if (me.shieldCooldown == 0)
+            return SHIELD;
+    }
     for (int i = 0; i < 4; i++)
         if (pos == DIRECTIONS[i])
             return static_cast<Choose>(i);
@@ -288,6 +264,20 @@ void Game::initDistance()
     for (auto &obj : objects)
         obj.distance = std::abs(obj.pos.x - me.head.x) + std::abs(obj.pos.y - me.head.y);
     std::sort(objects.begin(), objects.end(), cmp);
+}
+bool Game::checkDanger(Position pos, Position from)
+{
+    int cnt = 0;
+    for (int i = 0; i < 4; i++)
+    {
+        int x = pos.x + DIRECTIONS[i].x, y = pos.y + DIRECTIONS[i].y;
+        Position next = {x, y};
+        if (map[x][y] == WALL || map[x][y] == HEDA || map[x][y] == BODY || next == from)
+            cnt++;
+    }
+    if (cnt == 4)
+        return true;
+    return false;
 }
 
 int main()
